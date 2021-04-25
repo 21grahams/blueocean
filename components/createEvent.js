@@ -247,6 +247,6 @@ function CreateEvent(props) {
       </Modal.Footer>
     </Modal>
   );
-}
+};
 
 export default CreateEvent;
