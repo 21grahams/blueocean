@@ -1,15 +1,16 @@
-const { Client } = require("pg");
-const client = new Client({
-  user: "postgres",
-  password: "attendeaze",
-  database: "attendeaze_auth",
-  host: "34.212.23.186",
-});
+const { Pool } = require("pg");
+const assessmentRouter = require("../server/routes/assessments");
 
-client
-  .connect()
-  .then(() => console.log("Database Connected!"))
-  .catch((e) => console.log(e));
+connectionString = process.env.DATABASE_URL;
+
+const pool = new Pool({
+  connectionString,
+  max: 90,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+})
+
+pool.on('connect', () => console.log('database connected'))
 
 /*=================================================================
 ======================                  ===========================
@@ -29,7 +30,7 @@ const insertUser = (user, cb) => {
     password,
     token,
   } = user;
-  client.query(
+  pool.query(
     `
     INSERT INTO users
     (name, email, title, about_me, location, linkedin_url, password, token)
@@ -58,7 +59,7 @@ const insertUser = (user, cb) => {
 // inputs (event < {name, location, date, hostId, meetingUrl, summary, max} >, cb (err, results) => {} )
 const insertEvent = (event, cb) => {
   let { name, location, date, hostId, meetingUrl, summary, max } = event;
-  client.query(
+  pool.query(
     `INSERT INTO events (event_name, location, date, host_id, meeting_url, summary, attendee_max) VALUES
     (
         '${name}',
@@ -81,7 +82,7 @@ const insertEvent = (event, cb) => {
 };
 
 const insertEventPhoto = (eventId, url, cb) => {
-  client.query(
+  pool.query(
     `
   INSERT INTO event_photos
   (event_id, image)
@@ -100,7 +101,7 @@ const insertEventPhoto = (eventId, url, cb) => {
 };
 // inputs (userId <number>, eventId <number>, cb (err, results) => {})
 const makeUserAnAttendee = (userId, eventId, cb) => {
-  client.query(
+  pool.query(
     `INSERT INTO attendees (user_id, event_id) VALUES (${userId}, ${eventId})`,
     (err, results) => {
       if (err) {
@@ -113,7 +114,7 @@ const makeUserAnAttendee = (userId, eventId, cb) => {
 };
 
 const removeAttendee = (userId, eventId, cb) => {
-  client.query(
+  pool.query(
     `DELETE FROM attendees WHERE event_id = ${eventId} AND user_id = ${userId}`,
     (err, results) => {
       if (err) {
@@ -127,7 +128,7 @@ const removeAttendee = (userId, eventId, cb) => {
 
 // inputs (eventId <number>, questions <[{text: "question text here?", answers: [{text: "answer text here.", correct: true/false }, {}] }]>, cb (err, results) =>{})
 const insertAssessment = (eventId, questions, cb) => {
-  client.query(
+  pool.query(
     `INSERT INTO assessments (event_id) VALUES (${eventId}) RETURNING assessment_id`,
     (err, results) => {
       if (err) {
@@ -135,25 +136,17 @@ const insertAssessment = (eventId, questions, cb) => {
         cb(err, null);
       } else {
         let assessmentId = results.rows[0].assessment_id;
-        let valueString = "";
-        questions.forEach((question) => {
-          valueString += ", (" + assessmentId + ", '" + question.text + "') ";
-        });
-
-        valueString = valueString.slice(3);
-        if (valueString !== "") {
-          client.query(
-            `INSERT INTO questions (assessment_id, question_text) VALUES (${valueString} RETURNING question_id`,
+          pool.query(
+            `INSERT INTO questions (assessment_id, question_text) VALUES (${assessmentId}, '${questions.text}') RETURNING question_id`,
             (err, results) => {
+              var valueString = ''
               if (err) {
                 console.log(err);
                 cb(err, null);
               } else {
-                let valueString = "";
-                results.rows.forEach((question, i) => {
-                  let questionId = question.question_id;
-                  let answers = questions[i].answers;
-                  answers.forEach((answer) => {
+                
+                questionId = results.rows[0].question_id
+                  questions.answers.forEach((answer) => {
                     valueString +=
                       ", (" +
                       questionId +
@@ -163,10 +156,10 @@ const insertAssessment = (eventId, questions, cb) => {
                       answer.correct +
                       ") ";
                   });
-                });
+                };
                 valueString = valueString.slice(3);
                 if (valueString !== "") {
-                  client.query(
+                  pool.query(
                     `INSERT INTO answers (question_id, answer_text, correct) VALUES (${valueString}`,
                     (err, results) => {
                       if (err) {
@@ -175,14 +168,12 @@ const insertAssessment = (eventId, questions, cb) => {
                       }
                     }
                   );
-                }
+                } 
               }
-            }
           );
         }
         cb(null, results);
-      }
-    }
+      }// good
   );
 };
 
@@ -194,7 +185,7 @@ const insertAssessment = (eventId, questions, cb) => {
 */
 
 const getAllUpcomingEvents = (cb) => {
-  client.query(
+  pool.query(
     `
   SELECT *
   FROM events
@@ -214,14 +205,15 @@ const getAllUpcomingEvents = (cb) => {
 };
 
 const getEventsByAttendee = (userId, cb) => {
-  client.query(
+  pool.query(
     `SELECT
     *
     FROM events
     LEFT OUTER JOIN attendees ON events.event_id = attendees.event_id
     RIGHT OUTER JOIN event_photos ON events.event_id = event_photos.event_id
     WHERE date > NOW()
-    AND user_id = ${userId}`,
+    AND user_id = ${userId}
+    ORDER BY date ASC`,
     (err, results) => {
       if (err) {
         cb(err, null);
@@ -233,14 +225,15 @@ const getEventsByAttendee = (userId, cb) => {
 };
 
 const getEventsByHost = (userId, cb) => {
-  client.query(
+  pool.query(
     `
     SELECT *
     FROM events
     LEFT OUTER JOIN users ON events.host_id = users.id
     RIGHT OUTER JOIN event_photos ON events.event_id = event_photos.event_id
     WHERE date > NOW()
-    AND id = ${userId}`,
+    AND id = ${userId}
+    ORDER BY date ASC`,
     (err, results) => {
       if (err) {
         cb(err, null);
@@ -252,7 +245,7 @@ const getEventsByHost = (userId, cb) => {
 };
 
 const getAllUsers = (cb) => {
-  client.query(`SELECT * FROM users`, (err, results) => {
+  pool.query(`SELECT * FROM users`, (err, results) => {
     if (err) {
       cb(err, null);
     } else {
@@ -262,7 +255,7 @@ const getAllUsers = (cb) => {
 };
 
 const getAttendeesByEvent = (eventId, cb) => {
-  client.query(
+  pool.query(
     `
     SELECT *
     FROM users
@@ -279,7 +272,7 @@ const getAttendeesByEvent = (eventId, cb) => {
 };
 
 const getAssessmentQuestionsByEvent = (eventId, cb) => {
-  client.query(
+  pool.query(
     `
     SELECT
     assessments.assessment_id,
@@ -304,7 +297,7 @@ const getAssessmentQuestionsByEvent = (eventId, cb) => {
 };
 
 const getAnswersByQuestion = (questionId, cb) => {
-  client.query(
+  pool.query(
     `
   SELECT *
   FROM answers
@@ -321,7 +314,7 @@ const getAnswersByQuestion = (questionId, cb) => {
 };
 
 const getEventPhotos = (eventId, cb) => {
-  client.query(
+  pool.query(
     `
   SELECT *
   FROM event_photos
@@ -370,7 +363,7 @@ const updateUserProfile = (updateInfo, cb) => {
   }
   updateString = updateString.slice(0, -2);
 
-  client.query(
+  pool.query(
     `
   UPDATE users
   SET ${updateString}
@@ -388,7 +381,7 @@ const updateUserProfile = (updateInfo, cb) => {
 };
 
 const getUserProfileByEmail = (email, cb) => {
-  client.query(
+  pool.query(
     `
   SELECT *
   FROM users
@@ -402,6 +395,8 @@ const getUserProfileByEmail = (email, cb) => {
     }
   );
 };
+
+
 
 module.exports = {
   insertUser,

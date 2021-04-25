@@ -1,14 +1,22 @@
 import React, { useState } from "react";
-import Image from 'next/image';
+import Image from "next/image";
 import { Button, Modal } from "react-bootstrap";
 import requests from "../../handlers/requests";
+
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const EventCard = ({ image, name, location, date, userId, eventId }) => {
   const [show, setShow] = useState(false);
 
   const handleClose = () => setShow(false);
-  const handleShow = () => setShow(true);
+  const handleShow = () => {
+    // console.log("works");
+    // requests.fetchEventQuestions(eventId, (data) => {
+    //   console.log("YO");
+    //   console.log({ data });
+    // });
+    setShow(true);
+  };
 
   const handleSignUp = () => {
     requests.addUserToEvent(userId, eventId);
@@ -46,7 +54,7 @@ const EventCard = ({ image, name, location, date, userId, eventId }) => {
           </Button>
         </Modal.Footer>
       </Modal>
-    </>
+   </>
   );
 };
 

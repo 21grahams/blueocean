@@ -1,6 +1,16 @@
 .container {
-  /* background-color: darkgreen; */
   margin-left: 20%;
   margin-top: 85px;
-  padding: 2em;
+  padding: 45px 25px;
+  background-color: lightblue;
+}
+
+.content {
+  padding: 1%;
+  border-radius: 2rem;
+  background-color: rgba(243, 243, 243, 0.644);
+}
+
+.logo {
+  margin: auto;
 }
